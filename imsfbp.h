@@ -3,11 +3,10 @@
 
 
 #ifdef _WIN32 // WINDOWS
-
+	
+	#define NOMINMAX
 	#include <windows.h>
-	#undef min
-	#undef max
-
+	
 	#ifndef __MINGW32__ // Visual Studio
 /* using sfml 2.5.1
 
