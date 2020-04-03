@@ -1,7 +1,5 @@
 #pragma once
 
-
-
 #ifdef _WIN32 // WINDOWS
 	
 	#define NOMINMAX
@@ -10,8 +8,8 @@
 	#ifndef __MINGW32__ // Visual Studio
 /* using sfml 2.5.1
 
-bin output dir		: $(SolutionDir)bin\$(Configuration)-$(Platform)\$(ProjectName)\
-bin-int output dir	: $(SolutionDir)bin-int\$(Configuration)-$(Platform)\$(ProjectName)\
+bin output dir		: $(SolutionDir)bin/$(Configuration)-$(Platform)/$(ProjectName)/
+bin-int output dir	: $(SolutionDir)obj/$(Configuration)-$(Platform)/$(ProjectName)/
 
 addnl include dirs	: $(ProjectDir)vender/SFML-2.5.1/include;$(ProjectDir)vender/ImSf;$(ProjectDir)vender/ImGui
 addnl linking dirs	: $(ProjectDir)vender/SFML-2.5.1/lib;%(AdditionalLibraryDirectories)
