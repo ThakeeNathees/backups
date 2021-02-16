@@ -1,0 +1,25 @@
+---
+layout: default
+---
+
+{% highlight swift %}
+func main() {
+	println("hello world!");
+}
+{% endhighlight %}
+
+<h2 class="posts-header">Posts</h2>
+
+<ul class="post-list">
+{% for post in site.posts %}
+	<li class="post-list">
+		<span class="post-meta">{{ post.date | date: "%B %-d, %Y"}}</span>
+		<h3><a class="post-link" href="{{post.url}}">{{ post.title }}</a><h3>
+	</li>
+{% endfor %}
+</ul>
+
+
+
+
+

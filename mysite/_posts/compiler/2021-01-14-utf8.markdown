@@ -1,0 +1,149 @@
+---
+layout: post
+title:  "A tiny UTF-8 library "
+date:   2021-01-14 03:14:00 +05300
+categories: jekyll update
+permalink: "/compiler-design/utf8"
+---
+
+Utf-8 is an elegant character encoding which I just love it's simplicity, and compatibility It's just a wonderful hack of all time. It's a variable-width character encoding, and a single byte length utf-8 character is the same as an ASCII character. In case if you don't know about ASCII encoding it's just how a character is represented in a single byte. For an example the character 'A' is `01000001`, 'B' is `01000010` and so on. The first bit in ASCII is always 0 called parity bit, it's a way to check if  some of the bits have flipped by noice, back in the old age of computers. Parity bit should be equal to the sum of the rest of the bits mod 2. So we have 7 bits to represent ASCII which is 127 different characters. But unicode can potentially represent 2,164,864 different characters.
+
+Unicode has different value for each characters in the range of 2,164,864 and a 32 bit integer can store any value in that range, so we can represent a single unicode character as a 32 bit integer. This encoding is called utf-32 and it's not really memory efficient since in utf-32 a the character 'A' will be `00000000000000000000000001000001` and 'B' would be `00000000000000000000000001000010` and so on. Every character is 4 times bigger in utf-32 than in ASCII. The solution is utf-8 which is another encoding of unicode.
+
+The length of a utf-8 character would vary from 1 to 4. If it's a single byte character, it's starts with a 0 and rest of the 7 bytes have the  value, Just like ASCII. For the 2 bytes character the first byte starts with `110.....`, for the 3 bytes character it's starts with `1110....` and for the 4 byte it's `11110...` The first byte is called the leading byte and the rest of the bytes of the character is called continuation bytes. Continuation bytes starts with `10......`.
+
+![utf8.png](/assets/utf8-char-example.png)
+
+The first two bits of a continuation byte `10......` is usefull that it'll tell if we're at the middle of a multi byte character and if we want to get to the previous character, just skip all the continuation bytes till it's not one. If we remove the "Byte header" and join the rest of the bits we'll get the equivalent unicode value, the payload.
+
+## Let's write our library
+
+Our tiny library would encode a 32 bit unicode vlaue to a byte array, decode bytes into a 32 bit value and that's it. Before we start I highly recomend you to have a basic knoledge on C and bitwise operations. So open your favorite text editor, stretch your legs and ready to write some C code.
+
+```c
+#ifndef UTF8_H
+#define UTF8_H
+
+/** Returns the number of bytes the the [value] would take to encode. returns 0
+ * if the value is invalid utf8 representation. */
+int utf8_encodeBytesCount(int value);
+
+/** Returns the number of bytes the the leading [byte] contains. returns 1 if
+ * the byte is an invalid utf8 leading byte (to skip pass to the next byte). */
+int utf8_decodeBytesCount(uint8_t byte);
+
+/** Encodes the 32 bit value into a byte array which should be a size of 4 and
+ * returns the number of bytes the value encoded (if invalid returns 0, that
+ * how many it write to the buffer */
+int utf8_encodeValue(int value, uint8_t* bytes);
+
+/** Decodes from the leading [byte] and write the value to param [value] and
+ * returns the number of bytes the value decoded, if invalid write -1 to the
+ * value */
+int utf8_decodeBytes(uint8_t* bytes, int* value);
+
+#endif // UTF8_H
+```
+
+The above 4 functions would be our public api functions put them in a header file called `utf8.h` or what every you like, and don't forget to `#include <stdint.h>` and let's write the implementation in the source file `utf8.c`.
+
+Before we encode a 32 bit value to the buffer we need to know the number of the bytes it would take in utf-8. Our utility function `utf8_encodeBytesCount` is for that purpose.
+
+```c
+/*(1)*/ int utf8_encodeBytesCount(int value);
+```
+
+A single byte utf-8 could be like `0xxxxxxx` the range is `00000000` to `01111111`, `0-127` in hexadecimal `0x0-0x7f`. if any value is greater than `0x7f`, it would be 2 bytes long utf-8 character but what's the maximum of that value? The 2 bytes character would be like `110xxxxx 10xxxxxx` so the payload is 11 bits (11 x here) and the maximum value of a 11 bit can represent is `0x7ff`.
+
+![utf8-2byte-max.png](/assets/utf8-2byte-max.png)
+
+Similarly a 3 byte character would like `1110xxxx 10xxxxxx 10xxxxxx` so the payload here is 16 bits so the max value a 3 byte utf-8 could store is `0xffff` and 4 byte character could store `0x1fffff` but in [RFC3629 §3](https://tools.ietf.org/html/rfc3629#section-3) UTF-8 is limited to `0x10FFFF` to match the constraints of the of UTF-16. 
+
+```c
+int utf8_encodeBytesCount(int value) {
+    if (value <= 0x7f) return 1;
+    if (value <= 0x7ff) return 2;
+    if (value <= 0xffff) return 3;
+    if (value <= 0x10ffff) return 4;
+    
+    // if we're here means it's an invalid leading byte
+    return 0;
+}
+```
+
+Our next function is to find how many bytes long a character using the leading byte.
+
+```c
+/*(2)*/ int utf8_decodeBytesCount(uint8_t byte);
+```
+
+It's fairly simple if the first bit is `0b0` it's a single bit character, `0b10` a continuation character we could indicate that it's not a leading byte but for now we just return 1 as it could be the size to get to the next leading byte. If a byte starts with `0b110` it's a 2 byte long character, `0b1110` 3 bytes long and `0b11110` is 4 bytes long.
+
+```c
+int utf8_decodeBytesCount(uint8_t byte) {
+
+    if ((byte >> 7) == 0b0) return 1;
+    if ((byte >> 6) == 0b10) return 1; //< continuation byte
+    if ((byte >> 5) == 0b110) return 2;
+    if ((byte >> 4) == 0b1110) return 3;
+    if ((byte >> 3) == 0b11110) return 4;
+
+    // if we're here means it's an invalid utf8 byte
+    return 1;
+}
+```
+
+Now let's move to our 3rd function, to encode a 32 bit unicode value into a byte array.
+```c
+/*(3)*/ int utf8_encodeValue(int value, uint8_t* bytes);
+```
+
+The function takes an integer `value` as the unicode character to be encoded and write the encoded utf-8 bytes to where the pointer `bytes` points to and returns how many bytes it was written, the byte array required be at least 4 bytes long from the starting from the pointer `bytes`.
+
+If the length of the value is 1 we just write the first 7 bits to the byte array, and return 1, the first bit should be 0.
+```c
+int utf8_encodeValue(int value, uint8_t* bytes) {
+    int length = int utf8_encodeBytesCount(value);
+	
+    switch (length) {
+        case 1:
+                *bytes = value & 0x7f;
+                return 1;
+        case 2:
+        case 3:
+        case 4:
+            // TODO:
+    }
+}
+```
+
+If the `length` of the character is more than one, we have to split the bits into multiple bytes and add a "Byte header".
+
+![utf8-encoding.png](/assets/utf8-encoding.png)
+
+for 2 byte long character we take the first 5 bits add `110` header and write to the byte buffer, take last 6 bits add `10` header and write to the next buffer. 
+- `(value >> 6) & 0x1f` will shift the last 6 bits and the `&` operator with 5 bit mask `0x1f` (which is equal to `11111` in binary) with the shifted value will gives us the first 5 bits. To add the `110` with those 5 bits we just have to take the `|` operator with `110_00000` which is `0xc0`. So the first byte would be `0xc0 | ((value >> 6) & 0x1f)`.
+- for the second byte we just take `&` operator to the value with 6 bit mask `0x3f` (which is equal to `111111` in binary) and add the `10` header by performing `|` operation between the masked value and `10_000000` which is `0x80`. So the second byte would be `0x80 | (value & 0x3f)`
+
+```c
+case 2:
+        *bytes = 0xc0 | ((value >> 6) & 0x1f); //< 0x1f = 11111  5 bit mask
+        bytes++;                               //< move to the next byte
+        *bytes = 0x80 | (value & 0x3f);        //< 0x3f = 111111 6 bit mask
+        return 2;
+```
+
+Similarly for 3 byte long character we take the first 4 bits and add `1110` header before it and write it to the first byte, take the next 6 bits add `10` header write it to the next byte, take the last 6 bits add `10` header write it to the last byte.
+- `(value >> 12) & 0xf` will skip the last 12 bits and the `&` operation with the bit mask of 4 bits `0xf` will gives the first 4 bits. to add `1110` perform `|` operation with `1110_0000` which is `0xe0` so the first byte would be `0xe0 | ((value >> 12) & 0xf)`
+- for the second byte we have to shift 6 bits and apply a 6 bit mask, which will gives us the middle 6 bits, then add the `10` continuation header. `0x80 | ((value >> 6) & 0x3f)`
+- for the last byte just apply 6 bit mask `0x3f` to the value and add the `10` continuation header `0x80 | (value & 0x3f)`.
+
+```c
+case 3:
+        *bytes = 0xe0 | ((value >> 12) & 0xf); //< 0xf  =  1111  4 bit mask
+        bytes++;                               //< move to the next byte
+        *bytes = 0x80 | ((value >> 6) & 0x3f); //< 0x3f = 111111 6 bit mask
+        bytes++;                               //< move to the next byte
+        *bytes = 0x80 | (value & 0x3f);
+        return 3;
+```
