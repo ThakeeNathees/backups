@@ -1,0 +1,82 @@
+
+## Reference:
+## https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/
+
+## Base protocol example:
+##
+##   Content-Length: ...\r\n
+##   \r\n
+##   {
+##     "jsonrpc": "2.0",
+##     "id": 1,
+##     "method": "textDocument/didOpen",
+##     "params": {
+##       ...
+##     }
+##   }
+##
+
+import term, io, json
+from types import ByteBuffer
+from path import dirname, join
+
+LOG_FILE = join(dirname(__file__), "logs.log")
+
+def log(msg)
+  f = open(LOG_FILE, 'a')
+  f.write('$msg\n')
+  f.close()
+end
+
+## Listen for JSON rpc and return the content as pocketlang map.
+def listen()
+
+  header = ''; len = -1
+  while header = input()
+    log('Got Header: $header')
+    if 'Content-Length' in header
+      len = Number(header.split(':')[1].strip())
+    end
+  end
+  assert(len >= 0)
+
+  bb = ByteBuffer()
+  for i in 0..len
+    bb.write(io.getc())
+  end
+  content = bb.string()
+  log('Got content: $content')
+  return json.parse(content)
+end
+
+def main()
+  term.binary_mode()
+
+  while true
+    content = listen()
+    if content['method'] == 'initialize'
+      log('Got method initialize.')
+      response = {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "result": {
+          "capabilities": {
+            "textDocumentSync": 2,
+            "definitionProvider": true,
+            "workspaceSymbolProvider": true
+          }
+        }
+      }
+      res = json.print(response)
+      res = 'Content-Length: ${res.length}\r\n\r\n$res'
+      log('Sending: $res')
+      io.write(io.stdout, res)
+      io.flush()
+    end
+  end
+end
+
+
+if __name__ == '__main__'
+  main()
+end
